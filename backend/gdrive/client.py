@@ -1,32 +1,27 @@
+import io
+import json
 import os
-from google.oauth2.credentials import Credentials
-from google.auth.transport.requests import Request
-from google_auth_oauthlib.flow import InstalledAppFlow
+
+from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
-import io
 
 SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
-CREDENTIALS_FILE = os.getenv("GOOGLE_CREDENTIALS_FILE", "credentials.json")
-TOKEN_FILE = "token.json"
 
 
 def get_drive_service():
-    creds = None
-    if os.path.exists(TOKEN_FILE):
-        creds = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
-            flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_FILE, SCOPES)
-            creds = flow.run_local_server(port=0)
-        with open(TOKEN_FILE, "w") as f:
-            f.write(creds.to_json())
+    sa_json = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
+    if sa_json:
+        info = json.loads(sa_json)
+    else:
+        creds_file = os.getenv("GOOGLE_CREDENTIALS_FILE", "service-account.json")
+        with open(creds_file) as f:
+            info = json.load(f)
+    creds = service_account.Credentials.from_service_account_info(info, scopes=SCOPES)
     return build("drive", "v3", credentials=creds)
 
 
-def list_files(page_size: int = 20) -> list[dict]:
+def list_files(page_size: int = 50) -> list[dict]:
     service = get_drive_service()
     results = (
         service.files()
@@ -34,6 +29,7 @@ def list_files(page_size: int = 20) -> list[dict]:
             pageSize=page_size,
             fields="files(id, name, mimeType, modifiedTime, size)",
             orderBy="modifiedTime desc",
+            q="trashed=false",
         )
         .execute()
     )
@@ -43,7 +39,6 @@ def list_files(page_size: int = 20) -> list[dict]:
 def read_file_content(file_id: str, mime_type: str) -> str:
     service = get_drive_service()
 
-    # Google Docs → export as plain text
     export_types = {
         "application/vnd.google-apps.document": "text/plain",
         "application/vnd.google-apps.spreadsheet": "text/csv",
@@ -56,7 +51,6 @@ def read_file_content(file_id: str, mime_type: str) -> str:
         ).execute()
         return response.decode("utf-8") if isinstance(response, bytes) else response
 
-    # Binary files → download
     request = service.files().get_media(fileId=file_id)
     buffer = io.BytesIO()
     downloader = MediaIoBaseDownload(buffer, request)
