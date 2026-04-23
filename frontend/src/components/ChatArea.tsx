@@ -55,7 +55,7 @@ export default function ChatArea({ files, sessionId, onSessionCreated }: Props) 
         </div>
         {msgs.map((m,i) => (
           <div key={i} style={{display:"flex",gap:10,maxWidth:"80%",alignSelf:m.role==="user"?"flex-end":"flex-start",flexDirection:m.role==="user"?"row-reverse":"row"}}>
-            <div style={{width:30,height:30,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,flexShrink:0,background:m.role==="ai"||m.role==="assistant"?"#1d4ed8":"#e5e7eb",color:m.role==="user"?"#374151":"white"}}>
+            <div style={{width:30,height:30,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,flexShrink:0,background:m.role==="assistant"?"#1d4ed8":"#e5e7eb",color:m.role==="user"?"#374151":"white"}}>
               {m.role==="user"?"ส":"🤖"}
             </div>
             <div>
