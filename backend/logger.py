@@ -1,6 +1,9 @@
 import logging
+import os
 import time
 from fastapi import Request
+
+os.makedirs("data", exist_ok=True)
 
 logging.basicConfig(
     level=logging.INFO,
