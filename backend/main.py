@@ -1,7 +1,8 @@
 import os
-from fastapi import FastAPI, HTTPException
+import secrets
+from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
@@ -15,37 +16,68 @@ from deploy.approval import (
 )
 from db import init_db, create_session, save_message, get_session_history, list_sessions
 from logger import log_requests, logger
+from middleware.rate_limit import rate_limit
+from auth import get_auth_url, exchange_code, get_user
 
-app = FastAPI(title="Project Amico API", version="0.2.0")
+app = FastAPI(title="Project Amico API", version="0.3.0")
 app.middleware("http")(log_requests)
+app.middleware("http")(rate_limit)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 init_db()
 
 
+# --- Auth helpers ---
+def require_user(authorization: str = Header(default="")):
+    token = authorization.replace("Bearer ", "")
+    user = get_user(token)
+    if not user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return user
+
+
 class ChatRequest(BaseModel):
-  file_id: str
-  file_name: str
-  mime_type: str
-  message: str
-  session_id: str | None = None
+    file_id: str
+    file_name: str
+    mime_type: str
+    message: str
+    session_id: str | None = None
 
 
 class MultiChatRequest(BaseModel):
-  files: list[dict]          # [{id, name, mimeType}]
-  message: str
-  session_id: str | None = None
+    files: list[dict]
+    message: str
+    session_id: str | None = None
 
 
 class DeployRequest(BaseModel):
-  sprint: str
-  tasks: list[dict]
+    sprint: str
+    tasks: list[dict]
 
 
 # --- Health ---
 @app.get("/health")
 def health():
-    return {"status": "ok", "project": "Amico", "version": "0.2.0"}
+    return {"status": "ok", "project": "Amico", "version": "0.3.0"}
+
+
+# --- Auth ---
+@app.get("/auth/login")
+def login():
+    state = secrets.token_urlsafe(16)
+    return {"url": get_auth_url(state)}
+
+
+@app.get("/auth/callback")
+async def callback(code: str, state: str):
+    result = await exchange_code(code)
+    logger.info(f"User logged in: {result['user']['email']}")
+    return result
+
+
+@app.get("/auth/me")
+def me(user: dict = None):
+    return require_user()
 
 
 # --- Google Drive ---
@@ -70,8 +102,8 @@ def search(q: str):
 def get_summary(file_id: str, file_name: str, mime_type: str):
     try:
         content = read_file_content(file_id, mime_type)
-        summary = summarize_file(content, file_name)
-        return {"file_id": file_id, "file_name": file_name, "summary": summary}
+        return {"file_id": file_id, "file_name": file_name,
+                "summary": summarize_file(content, file_name)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -103,7 +135,8 @@ def chat_multi(req: MultiChatRequest):
         reply = chat_with_files(docs, req.message)
         save_message(session_id, "user", req.message)
         save_message(session_id, "assistant", reply)
-        return {"reply": reply, "session_id": session_id, "files": [f["name"] for f in req.files]}
+        return {"reply": reply, "session_id": session_id,
+                "files": [f["name"] for f in req.files]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -138,7 +171,7 @@ def approve_deploy(token: str):
     if not approval:
         return "<div style='font-family:sans-serif;text-align:center;padding:60px'><h1 style='color:#dc2626'>❌ ลิงก์ไม่ถูกต้องหรือหมดอายุแล้ว</h1></div>"
     mark_approved(token)
-    logger.info(f"Deploy approved for token {token[:8]}...")
+    logger.info(f"Deploy approved — token {token[:8]}...")
     return """
     <div style='font-family:sans-serif;text-align:center;padding:60px'>
       <h1 style='color:#16a34a'>✅ Approved!</h1>
