@@ -1,1 +1,1 @@
-from .client import get_drive_service, list_files, read_file_content
+from .client import get_drive_service, list_files, read_file_content, search_files

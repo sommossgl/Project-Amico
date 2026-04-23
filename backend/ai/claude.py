@@ -30,3 +30,25 @@ def chat_with_file(file_content: str, file_name: str, user_message: str) -> str:
 
 def summarize_file(file_content: str, file_name: str) -> str:
     return chat_with_file(file_content, file_name, "สรุปเนื้อหาหลักของเอกสารนี้ให้กระชับและครอบคลุม")
+
+
+def chat_with_files(docs: list[dict], user_message: str) -> str:
+    """Chat with multiple Drive files simultaneously"""
+    doc_blocks = [
+        {
+            "type": "text",
+            "text": f"<document name=\"{d['name']}\">\n{d['content']}\n</document>",
+            "cache_control": {"type": "ephemeral"},
+        }
+        for d in docs
+    ]
+    doc_blocks.append({"type": "text", "text": user_message})
+
+    response = client.messages.create(
+        model=MODEL,
+        max_tokens=2048,
+        system="คุณคือ Amico ผู้ช่วย AI ของ SompenTech ตอบโดยอิงจากเนื้อหาในเอกสารที่ได้รับเท่านั้น ห้าม hallucinate",
+        messages=[{"role": "user", "content": doc_blocks}],
+        extra_headers={"anthropic-beta": "prompt-caching-2024-07-31"},
+    )
+    return response.content[0].text

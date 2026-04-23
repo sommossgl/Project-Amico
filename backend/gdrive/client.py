@@ -64,3 +64,17 @@ def read_file_content(file_id: str, mime_type: str) -> str:
     while not done:
         _, done = downloader.next_chunk()
     return buffer.getvalue().decode("utf-8", errors="ignore")
+
+
+def search_files(query: str, page_size: int = 20) -> list[dict]:
+    service = get_drive_service()
+    results = (
+        service.files()
+        .list(
+            q=f"name contains '{query}' and trashed=false",
+            pageSize=page_size,
+            fields="files(id, name, mimeType, modifiedTime)",
+        )
+        .execute()
+    )
+    return results.get("files", [])

@@ -1,1 +1,1 @@
-from .claude import chat_with_file, summarize_file
+from .claude import chat_with_file, chat_with_files, summarize_file

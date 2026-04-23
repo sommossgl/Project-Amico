@@ -1,0 +1,86 @@
+name: Project Amico CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          cd backend
+          pip install -r requirements.txt
+          pip install pytest pytest-cov
+
+      - name: Run tests
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          cd backend
+          pytest ../tests/ -v --cov=. --cov-report=term-missing
+
+  deploy-approval:
+    name: Request Deploy Approval
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          cd backend
+          pip install -r requirements.txt
+
+      - name: Send approval email to CEO
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          BASE_URL: ${{ secrets.BASE_URL }}
+        run: |
+          python - << 'PYEOF'
+          import sys, os
+          sys.path.insert(0, "backend")
+          from deploy.approval import create_approval_request, send_approval_email
+          import json, subprocess
+
+          commit = subprocess.check_output(["git", "log", "-1", "--pretty=%s"]).decode().strip()
+          sha = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"]).decode().strip()
+
+          tasks = [
+              {"name": f"Commit: {commit}", "status": "passed CI"},
+              {"name": f"SHA: {sha}", "status": "tests passed"},
+          ]
+          token = create_approval_request(tasks, "Sprint 2")
+          send_approval_email(token, tasks, "Sprint 2")
+          print(f"Approval email sent. Token: {token}")
+          PYEOF
+
+  deploy:
+    name: Deploy (after approval)
+    needs: deploy-approval
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy
+        run: echo "Deploy triggered after CEO approval ✅"
