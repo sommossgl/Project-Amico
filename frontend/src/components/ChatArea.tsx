@@ -1,7 +1,7 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
 import { DriveFile } from "@/app/page";
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+import { authFetch } from "@/lib/auth";
 
 interface Msg { role: "user"|"assistant"; text: string; time: string; }
 interface Props { files: DriveFile[]; sessionId: string|null; onSessionCreated: (id:string)=>void; }
@@ -30,8 +30,12 @@ export default function ChatArea({ files, sessionId, onSessionCreated }: Props) 
       const body = isMulti
         ? {files:files.map(f=>({id:f.id,name:f.name,mimeType:f.mimeType})),message:text,session_id:sessionId}
         : {file_id:files[0].id,file_name:files[0].name,mime_type:files[0].mimeType,message:text,session_id:sessionId};
-      const res = await fetch(`${API}/chat${isMulti?"/multi":""}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+      const res = await authFetch(`/chat${isMulti?"/multi":""}`,{method:"POST",body:JSON.stringify(body)});
       const data = await res.json();
+      if (!res.ok) {
+        setMsgs(m => [...m, {role:"assistant",text:`❌ ${data.detail || "เกิดข้อผิดพลาด"}`,time:now()}]);
+        return;
+      }
       if (data.session_id) onSessionCreated(data.session_id);
       setMsgs(m => [...m, {role:"assistant",text:data.reply,time:now()}]);
     } catch {

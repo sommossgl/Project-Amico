@@ -7,3 +7,16 @@ node_modules/
 venv/
 *.egg-info/
 .DS_Store
+
+# TypeScript / Next.js build artifacts
+*.tsbuildinfo
+tsconfig.tsbuildinfo
+
+# Google Service Account keys — never commit
+*service-account*.json
+rugged-future-*.json
+backend/rugged-future-*.json
+
+# SQLite database (legacy, before Supabase migration)
+backend/data/
+*.db

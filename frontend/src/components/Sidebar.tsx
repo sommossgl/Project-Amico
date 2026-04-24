@@ -1,30 +1,36 @@
 "use client";
 import { useEffect, useState } from "react";
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+import { authFetch } from "@/lib/auth";
 
 interface Session { id: string; created_at: string; message_count: number; }
-interface Props { sessionId: string | null; onSelectSession: (id: string) => void; }
+interface Props {
+  sessionId: string | null;
+  onSelectSession: (id: string) => void;
+  isAdmin?: boolean;
+}
 
-const menuItems = [
-  { icon: "💬", label: "Chat กับไฟล์", active: true },
-  { icon: "📁", label: "Google Drive", active: false },
-  { icon: "📊", label: "รายงาน", active: false },
-  { icon: "⚙️", label: "ตั้งค่า", active: false },
-];
-
-export default function Sidebar({ sessionId, onSelectSession }: Props) {
+export default function Sidebar({ sessionId, onSelectSession, isAdmin }: Props) {
   const [sessions, setSessions] = useState<Session[]>([]);
+
   useEffect(() => {
-    fetch(`${API}/sessions`).then(r => r.json()).then(d => setSessions(d.sessions ?? [])).catch(()=>{});
+    authFetch("/sessions")
+      .then(r => r.ok ? r.json() : { sessions: [] })
+      .then(d => setSessions(d.sessions ?? []))
+      .catch(() => {});
   }, [sessionId]);
+
+  const menuItems = [
+    { icon: "💬", label: "Chat กับไฟล์", href: "/", active: true },
+    ...(isAdmin ? [{ icon: "⚙️", label: "ตั้งค่า (Admin)", href: "/settings", active: false }] : []),
+  ];
 
   return (
     <div style={{width:240,background:"#1e293b",color:"#cbd5e1",display:"flex",flexDirection:"column",flexShrink:0}}>
       <div style={{padding:"16px 12px 8px",fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:1,color:"#64748b"}}>เมนู</div>
       {menuItems.map(m => (
-        <div key={m.label} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 14px",fontSize:13,cursor:"pointer",borderRadius:6,margin:"1px 6px",background:m.active?"#1d4ed8":"transparent",color:m.active?"white":"#cbd5e1"}}>
+        <a key={m.label} href={m.href} style={{textDecoration:"none",display:"flex",alignItems:"center",gap:10,padding:"8px 14px",fontSize:13,cursor:"pointer",borderRadius:6,margin:"1px 6px",background:m.active?"#1d4ed8":"transparent",color:m.active?"white":"#cbd5e1"}}>
           <span style={{fontSize:14,width:18,textAlign:"center"}}>{m.icon}</span>{m.label}
-        </div>
+        </a>
       ))}
       <div style={{padding:"16px 12px 8px",fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:1,color:"#64748b",marginTop:8}}>ประวัติการสนทนา</div>
       <div style={{flex:1,overflowY:"auto",paddingBottom:12}}>

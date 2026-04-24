@@ -21,15 +21,34 @@ def get_drive_service():
     return build("drive", "v3", credentials=creds)
 
 
-def list_files(page_size: int = 50) -> list[dict]:
+def _build_parent_query(folder_ids: list[str]) -> str:
+    """'id in parents' — OR'd for multiple folder IDs."""
+    if not folder_ids:
+        return ""
+    parts = [f"'{fid}' in parents" for fid in folder_ids]
+    return "(" + " or ".join(parts) + ")"
+
+
+def list_files(folder_ids: list[str] | None = None, page_size: int = 100) -> list[dict]:
+    """List files — optionally restricted to specific parent folder IDs."""
+    if folder_ids is not None and len(folder_ids) == 0:
+        return []
+
     service = get_drive_service()
+    q_parts = ["trashed=false"]
+    if folder_ids:
+        q_parts.append(_build_parent_query(folder_ids))
+    query = " and ".join(q_parts)
+
     results = (
         service.files()
         .list(
             pageSize=page_size,
-            fields="files(id, name, mimeType, modifiedTime, size)",
+            fields="files(id, name, mimeType, modifiedTime, size, parents)",
             orderBy="modifiedTime desc",
-            q="trashed=false",
+            q=query,
+            includeItemsFromAllDrives=True,
+            supportsAllDrives=True,
         )
         .execute()
     )
@@ -60,15 +79,42 @@ def read_file_content(file_id: str, mime_type: str) -> str:
     return buffer.getvalue().decode("utf-8", errors="ignore")
 
 
-def search_files(query: str, page_size: int = 20) -> list[dict]:
+def search_files(query: str, folder_ids: list[str] | None = None, page_size: int = 40) -> list[dict]:
+    if folder_ids is not None and len(folder_ids) == 0:
+        return []
+
     service = get_drive_service()
+    q_parts = [f"name contains '{query}'", "trashed=false"]
+    if folder_ids:
+        q_parts.append(_build_parent_query(folder_ids))
+    q = " and ".join(q_parts)
+
     results = (
         service.files()
         .list(
-            q=f"name contains '{query}' and trashed=false",
+            q=q,
             pageSize=page_size,
-            fields="files(id, name, mimeType, modifiedTime)",
+            fields="files(id, name, mimeType, modifiedTime, parents)",
+            includeItemsFromAllDrives=True,
+            supportsAllDrives=True,
         )
         .execute()
     )
     return results.get("files", [])
+
+
+def file_in_folders(file_id: str, folder_ids: list[str]) -> bool:
+    """Check a specific file has any of its parents in folder_ids."""
+    if not folder_ids:
+        return False
+    service = get_drive_service()
+    try:
+        meta = (
+            service.files()
+            .get(fileId=file_id, fields="parents", supportsAllDrives=True)
+            .execute()
+        )
+    except Exception:
+        return False
+    parents = set(meta.get("parents", []))
+    return bool(parents.intersection(set(folder_ids)))

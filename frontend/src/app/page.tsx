@@ -1,9 +1,10 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Navbar from "@/components/Navbar";
 import Sidebar from "@/components/Sidebar";
 import FilePanel from "@/components/FilePanel";
 import ChatArea from "@/components/ChatArea";
+import { getToken, getUser, AmicoUser } from "@/lib/auth";
 
 export interface DriveFile { id: string; name: string; mimeType: string; modified?: string; }
 export interface Session { id: string; created_at: string; message_count: number; title?: string; }
@@ -11,19 +12,39 @@ export interface Session { id: string; created_at: string; message_count: number
 export default function Home() {
   const [selectedFiles, setSelectedFiles] = useState<DriveFile[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [user, setUser] = useState<AmicoUser | null>(null);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    const token = getToken();
+    const u = getUser();
+    if (!token || !u) {
+      window.location.href = "/login";
+      return;
+    }
+    setUser(u);
+    setReady(true);
+  }, []);
 
   const toggleFile = (file: DriveFile) =>
     setSelectedFiles(prev =>
       prev.find(f => f.id === file.id) ? prev.filter(f => f.id !== file.id) : [...prev, file]
     );
 
+  if (!ready || !user) {
+    return (
+      <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#f8fafc"}}>
+        <div style={{color:"#64748b",fontSize:14}}>กำลังโหลด...</div>
+      </div>
+    );
+  }
+
   return (
     <div style={{display:"flex",flexDirection:"column",height:"100vh"}}>
-      <Navbar />
+      <Navbar user={user} />
       <div style={{display:"flex",flex:1,overflow:"hidden"}}>
-        <Sidebar sessionId={sessionId} onSelectSession={setSessionId} />
+        <Sidebar sessionId={sessionId} onSelectSession={setSessionId} isAdmin={user.is_admin} />
         <main style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
-          {/* Topbar */}
           <div style={{background:"white",borderBottom:"1px solid #e2e8f0",padding:"10px 20px",display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
             <span style={{fontSize:14,fontWeight:600,color:"#1e3a8a"}}>💬 Chat กับไฟล์</span>
             {selectedFiles.map(f => (
